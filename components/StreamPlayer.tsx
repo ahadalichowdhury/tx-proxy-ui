@@ -2,15 +2,32 @@
 
 import { toProxyMediaUrl, shouldRouteThroughProxy } from "@/lib/proxy";
 import { buildShakaDrmConfig } from "@/lib/proxy/parse";
+import {
+  buildQualityOptionsFromHeights,
+  type QualityOption,
+} from "@/lib/player/quality";
 import type { StreamDrmConfig } from "@/lib/streams/drm";
+import { PlayerControls } from "@/components/PlayerControls";
 import Hls, { type HlsConfig } from "hls.js";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+type ShakaVariantTrack = {
+  id: number;
+  active: boolean;
+  type: string;
+  bandwidth?: number;
+  height?: number;
+  width?: number;
+  frameRate?: number;
+};
 
 type ShakaPlayer = {
   destroy: () => Promise<boolean>;
   attach: (video: HTMLVideoElement) => void;
   load: (url: string) => Promise<void>;
   configure: (config: Record<string, unknown>) => boolean;
+  getVariantTracks: () => ShakaVariantTrack[];
+  selectVariantTrack: (track: ShakaVariantTrack, clearBuffer?: boolean) => void;
   getNetworkingEngine: () => {
     registerRequestFilter: (
       filter: (
@@ -85,6 +102,44 @@ const HLS_CONFIG: Partial<HlsConfig> = {
 const DEFAULT_ASPECT = 16 / 9;
 const PLAYER_LOADING_IMAGE = "/fifa.webp";
 
+type QualityController = {
+  apply: (qualityId: string) => void;
+};
+
+function buildHlsQualityOptions(hls: Hls): QualityOption[] {
+  return buildQualityOptionsFromHeights(
+    hls.levels.map((level, index) => ({
+      id: `hls-${index}`,
+      height: level.height,
+      frameRate: level.frameRate,
+      bandwidth: level.bitrate,
+    })),
+  );
+}
+
+function buildShakaQualityOptions(
+  tracks: ShakaVariantTrack[],
+): { options: QualityOption[]; trackById: Map<string, ShakaVariantTrack> } {
+  const trackById = new Map<string, ShakaVariantTrack>();
+  const entries = tracks
+    .filter((track) => track.type === "variant" && (track.height ?? 0) > 0)
+    .map((track) => {
+      const id = `shaka-${track.id}`;
+      trackById.set(id, track);
+      return {
+        id,
+        height: track.height ?? 0,
+        frameRate: track.frameRate,
+        bandwidth: track.bandwidth,
+      };
+    });
+
+  return {
+    options: buildQualityOptionsFromHeights(entries),
+    trackById,
+  };
+}
+
 async function fetchPlaybackSession(
   streamId: number,
   linkIndex: number,
@@ -118,16 +173,49 @@ export function StreamPlayer({
   onStatusChange,
 }: StreamPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const shakaRef = useRef<ShakaPlayer | null>(null);
   const [status, setStatus] = useState<PlaybackStatus>("loading");
   const [isBuffering, setIsBuffering] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
   const [aspectRatio, setAspectRatio] = useState(DEFAULT_ASPECT);
   const [awaitingFirstFrame, setAwaitingFirstFrame] = useState(true);
+  const [qualityOptions, setQualityOptions] = useState<QualityOption[]>([]);
+  const [selectedQualityId, setSelectedQualityId] = useState("auto");
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   const proxyBase = proxyBaseUrl.replace(/\/+$/, "");
   const statusRef = useRef<PlaybackStatus>("loading");
+  const hideControlsTimerRef = useRef<number | null>(null);
+  const qualityControllerRef = useRef<QualityController | null>(null);
+  const shakaTracksRef = useRef<Map<string, ShakaVariantTrack>>(new Map());
+
+  const resetQualityState = useCallback(() => {
+    setQualityOptions([]);
+    setSelectedQualityId("auto");
+    qualityControllerRef.current = null;
+    shakaTracksRef.current = new Map();
+  }, []);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+
+    if (hideControlsTimerRef.current !== null) {
+      window.clearTimeout(hideControlsTimerRef.current);
+    }
+
+    const video = videoRef.current;
+    if (statusRef.current === "live" && video && !video.paused) {
+      hideControlsTimerRef.current = window.setTimeout(() => {
+        setControlsVisible(false);
+      }, 3000);
+    }
+  }, []);
+
+  const handleQualitySelect = useCallback((qualityId: string) => {
+    qualityControllerRef.current?.apply(qualityId);
+    setSelectedQualityId(qualityId);
+  }, []);
 
   useEffect(() => {
     statusRef.current = status;
@@ -139,7 +227,24 @@ export function StreamPlayer({
     setStatus("loading");
     setAwaitingFirstFrame(true);
     setIsBuffering(true);
-  }, [streamId, linkIndex]);
+    resetQualityState();
+  }, [streamId, linkIndex, resetQualityState]);
+
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimerRef.current !== null) {
+        window.clearTimeout(hideControlsTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status === "live") {
+      revealControls();
+    } else {
+      setControlsVisible(true);
+    }
+  }, [revealControls, status]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -180,6 +285,7 @@ export function StreamPlayer({
     };
 
     const destroyPlayers = () => {
+      resetQualityState();
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -213,6 +319,7 @@ export function StreamPlayer({
       setIsBuffering(true);
       destroyPlayers();
       video.removeAttribute("src");
+      video.muted = false;
       video.load();
 
       const {
@@ -225,8 +332,9 @@ export function StreamPlayer({
 
       if (useDash) {
         try {
-          const shakaModule =
-            (await import("shaka-player/dist/shaka-player.compiled.js")) as {
+          const shakaModule = (await import(
+            "shaka-player/dist/shaka-player.compiled.js"
+          )) as unknown as {
               default: ShakaNamespace;
             };
           const shaka = shakaModule.default;
@@ -282,6 +390,37 @@ export function StreamPlayer({
             return;
           }
 
+          const { options, trackById } = buildShakaQualityOptions(
+            player.getVariantTracks(),
+          );
+          shakaTracksRef.current = trackById;
+          setQualityOptions(options);
+          setSelectedQualityId("auto");
+
+          if (options.length > 0) {
+            qualityControllerRef.current = {
+              apply: (qualityId) => {
+                const activePlayer = shakaRef.current;
+                if (!activePlayer) {
+                  return;
+                }
+
+                if (qualityId === "auto") {
+                  activePlayer.configure({ abr: { enabled: true } });
+                  return;
+                }
+
+                const track = shakaTracksRef.current.get(qualityId);
+                if (!track) {
+                  return;
+                }
+
+                activePlayer.configure({ abr: { enabled: false } });
+                activePlayer.selectVariantTrack(track, true);
+              },
+            };
+          }
+
           updateStatus("live");
           setIsBuffering(false);
 
@@ -300,12 +439,79 @@ export function StreamPlayer({
         hlsRef.current = hls;
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          const options = buildHlsQualityOptions(hls);
+          setQualityOptions(options);
+          setSelectedQualityId("auto");
+
+          if (options.length > 0) {
+            qualityControllerRef.current = {
+              apply: (qualityId) => {
+                const activeHls = hlsRef.current;
+                if (!activeHls) {
+                  return;
+                }
+
+                if (qualityId === "auto") {
+                  activeHls.currentLevel = -1;
+                  return;
+                }
+
+                const levelIndex = Number.parseInt(
+                  qualityId.replace("hls-", ""),
+                  10,
+                );
+                if (Number.isNaN(levelIndex)) {
+                  return;
+                }
+
+                activeHls.currentLevel = levelIndex;
+              },
+            };
+          }
+
           updateStatus("live");
           setIsBuffering(false);
           if (autoPlay) {
             void video.play().catch(() => {
               updateStatus("offline");
             });
+          }
+        });
+
+        hls.on(Hls.Events.LEVELS_UPDATED, () => {
+          const options = buildHlsQualityOptions(hls);
+          setQualityOptions(options);
+
+          if (options.length === 0) {
+            qualityControllerRef.current = null;
+            setSelectedQualityId("auto");
+            return;
+          }
+
+          if (!qualityControllerRef.current) {
+            qualityControllerRef.current = {
+              apply: (qualityId) => {
+                const activeHls = hlsRef.current;
+                if (!activeHls) {
+                  return;
+                }
+
+                if (qualityId === "auto") {
+                  activeHls.currentLevel = -1;
+                  return;
+                }
+
+                const levelIndex = Number.parseInt(
+                  qualityId.replace("hls-", ""),
+                  10,
+                );
+                if (Number.isNaN(levelIndex)) {
+                  return;
+                }
+
+                activeHls.currentLevel = levelIndex;
+              },
+            };
           }
         });
 
@@ -383,7 +589,7 @@ export function StreamPlayer({
       video.removeEventListener("playing", onPlaying);
       destroyPlayers();
     };
-  }, [autoPlay, linkIndex, proxyBase, proxyBaseUrl, streamId]);
+  }, [autoPlay, linkIndex, proxyBase, proxyBaseUrl, resetQualityState, streamId]);
 
   const showLoadingSplash = awaitingFirstFrame && status !== "offline";
   const showRebuffering =
@@ -395,8 +601,16 @@ export function StreamPlayer({
 
   return (
     <div
-      className={shellClass}
+      ref={shellRef}
+      className={`${shellClass} group/player`}
       style={adaptiveFit ? { aspectRatio } : undefined}
+      onMouseMove={revealControls}
+      onTouchStart={revealControls}
+      onMouseLeave={() => {
+        if (status === "live" && videoRef.current && !videoRef.current.paused) {
+          setControlsVisible(false);
+        }
+      }}
     >
       <video
         ref={videoRef}
@@ -405,25 +619,10 @@ export function StreamPlayer({
             ? "block h-full w-full bg-black"
             : "aspect-video h-full w-full bg-black object-contain"
         }
-        controls
         playsInline
-        muted={isMuted}
         preload="auto"
         aria-label={title ? `Stream player for ${title}` : "Stream player"}
       />
-
-      {isMuted && status === "live" && !showLoadingSplash && !showRebuffering && (
-        <button
-          type="button"
-          onClick={() => {
-            setIsMuted(false);
-            void videoRef.current?.play();
-          }}
-          className="absolute bottom-16 right-3 rounded-full border border-white/20 bg-black/75 px-4 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-black/90 sm:bottom-3"
-        >
-          Tap to unmute
-        </button>
-      )}
 
       {showLoadingSplash && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden bg-black">
@@ -460,6 +659,23 @@ export function StreamPlayer({
           </p>
         </div>
       )}
+
+      {status === "live" ? (
+        <div
+          className={`transition-opacity duration-300 ${
+            controlsVisible ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <PlayerControls
+            videoRef={videoRef}
+            containerRef={shellRef}
+            visible={controlsVisible}
+            qualityOptions={qualityOptions}
+            selectedQualityId={selectedQualityId}
+            onQualitySelect={handleQualitySelect}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

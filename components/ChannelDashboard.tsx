@@ -366,7 +366,7 @@ export function ChannelDashboard({ channels, proxyBaseUrl }: ChannelDashboardPro
                   <button
                     type="button"
                     onClick={() => setTheaterMode((value) => !value)}
-                    className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/60 p-2 text-zinc-200 backdrop-blur-md transition hover:bg-black/80 hover:text-white"
+                    className="absolute right-3 top-3 hidden rounded-full border border-white/15 bg-black/60 p-2 text-zinc-200 backdrop-blur-md transition hover:bg-black/80 hover:text-white lg:inline-flex"
                     title={theaterMode ? "Compact player" : "Theater mode"}
                   >
                     <TheaterIcon expanded={theaterMode} />
