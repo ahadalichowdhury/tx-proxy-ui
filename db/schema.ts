@@ -50,3 +50,11 @@ export type PlaylistSource = typeof playlistSources.$inferSelect;
 export type NewPlaylistSource = typeof playlistSources.$inferInsert;
 export type Stream = typeof streams.$inferSelect;
 export type NewStream = typeof streams.$inferInsert;
+
+export const presenceSessions = sqliteTable("presence_sessions", {
+  sessionId: text("session_id").primaryKey(),
+  lastSeen: integer("last_seen", { mode: "timestamp_ms" }).notNull(),
+  path: text("path"),
+});
+
+export type PresenceSession = typeof presenceSessions.$inferSelect;

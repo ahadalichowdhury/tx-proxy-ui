@@ -1,6 +1,7 @@
 import { ChannelDashboard } from "@/components/ChannelDashboard";
 import { getAllStreams } from "@/db/queries";
 import { getProxyBaseUrl } from "@/lib/proxy/server";
+import { toPublicChannel } from "@/lib/streams/public-channel";
 
 export const runtime = "edge";
 
@@ -63,7 +64,9 @@ export default async function HomePage() {
     );
   }
 
+  const publicChannels = streams.map((stream) => toPublicChannel(stream));
+
   return (
-    <ChannelDashboard streams={streams} proxyBaseUrl={proxyBaseUrl} />
+    <ChannelDashboard channels={publicChannels} proxyBaseUrl={proxyBaseUrl} />
   );
 }

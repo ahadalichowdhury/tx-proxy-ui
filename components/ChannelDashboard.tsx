@@ -3,16 +3,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { StreamPlayer, type PlaybackStatus } from "@/components/StreamPlayer";
 import { StatusBadge } from "@/components/StatusBadge";
-import type { Stream } from "@/db/schema";
 import {
-  groupChannelsByCategory,
-  isValidLogoUrl,
-  toDashboardChannel,
-  type DashboardChannel,
-} from "@/lib/streams/channel-metadata";
+  groupPublicChannelsByCategory,
+  type PublicChannel,
+} from "@/lib/streams/public-channel";
+import { isValidLogoUrl } from "@/lib/streams/channel-metadata";
 
 type ChannelDashboardProps = {
-  streams: Stream[];
+  channels: PublicChannel[];
   proxyBaseUrl: string;
 };
 
@@ -61,7 +59,7 @@ function ChannelListItem({
   isPlaying,
   onSelect,
 }: {
-  channel: DashboardChannel;
+  channel: PublicChannel;
   isActive: boolean;
   isPlaying: boolean;
   onSelect: () => void;
@@ -168,13 +166,9 @@ function CategoryPill({
   );
 }
 
-export function ChannelDashboard({ streams, proxyBaseUrl }: ChannelDashboardProps) {
-  const channels = useMemo(
-    () => streams.map((stream) => toDashboardChannel(stream)),
-    [streams],
-  );
+export function ChannelDashboard({ channels, proxyBaseUrl }: ChannelDashboardProps) {
   const groupedChannels = useMemo(
-    () => groupChannelsByCategory(channels),
+    () => groupPublicChannelsByCategory(channels),
     [channels],
   );
   const categories = useMemo(
@@ -191,8 +185,6 @@ export function ChannelDashboard({ streams, proxyBaseUrl }: ChannelDashboardProp
 
   const selectedStream =
     channels.find((stream) => stream.id === selectedId) ?? null;
-  const activeLink =
-    selectedStream?.links[selectedLinkIndex] ?? selectedStream?.links[0] ?? null;
 
   const filteredGroups = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -346,7 +338,7 @@ export function ChannelDashboard({ streams, proxyBaseUrl }: ChannelDashboardProp
             )}
 
             <div className="relative flex min-h-0 flex-1 flex-col justify-center px-3 py-3 sm:px-6 sm:py-5">
-              {selectedStream && activeLink ? (
+              {selectedStream ? (
                 <div
                   className={`relative mx-auto w-full transition-all duration-500 ease-out ${
                     theaterMode ? "max-w-none" : "max-w-4xl"
@@ -361,7 +353,8 @@ export function ChannelDashboard({ streams, proxyBaseUrl }: ChannelDashboardProp
                   >
                     <StreamPlayer
                       key={`${selectedStream.id}-${selectedLinkIndex}`}
-                      rawUrl={activeLink.url}
+                      streamId={selectedStream.id}
+                      linkIndex={selectedLinkIndex}
                       title={selectedStream.title}
                       proxyBaseUrl={proxyBaseUrl}
                       onStatusChange={handlePlaybackStatusChange}
@@ -437,15 +430,15 @@ export function ChannelDashboard({ streams, proxyBaseUrl }: ChannelDashboardProp
 
                   {selectedStream.links.length > 1 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {selectedStream.links.map((link, index) => {
-                        const isActive = index === selectedLinkIndex;
+                      {selectedStream.links.map((link) => {
+                        const isActive = link.index === selectedLinkIndex;
 
                         return (
                           <button
-                            key={`${selectedStream.id}-${link.label}-${index}`}
+                            key={`${selectedStream.id}-${link.label}-${link.index}`}
                             type="button"
                             onClick={() => {
-                              setSelectedLinkIndex(index);
+                              setSelectedLinkIndex(link.index);
                               setPlaybackStatus("loading");
                             }}
                             className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${

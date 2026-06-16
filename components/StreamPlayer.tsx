@@ -1,14 +1,10 @@
 "use client";
 
-import { toProxyMediaUrl, toProxyStreamUrl, shouldRouteThroughProxy } from "@/lib/proxy";
-import {
-  buildLicenseRequestAuth,
-  buildShakaDrmConfig,
-  parseStreamSourceFull,
-} from "@/lib/proxy/parse";
-import { isDashStreamUrl } from "@/lib/proxy/parse";
+import { toProxyMediaUrl, shouldRouteThroughProxy } from "@/lib/proxy";
+import { buildShakaDrmConfig } from "@/lib/proxy/parse";
+import type { StreamDrmConfig } from "@/lib/streams/drm";
 import Hls, { type HlsConfig } from "hls.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ShakaPlayer = {
   destroy: () => Promise<boolean>;
@@ -49,8 +45,18 @@ type ShakaNamespace = {
 
 export type PlaybackStatus = "loading" | "live" | "offline";
 
+type PlaybackSession = {
+  playbackUrl: string;
+  tokenized: boolean;
+  useDash: boolean;
+  httpAuth: string;
+  licenseAuth: string;
+  drm?: StreamDrmConfig;
+};
+
 type StreamPlayerProps = {
-  rawUrl: string;
+  streamId: number;
+  linkIndex: number;
   proxyBaseUrl: string;
   title?: string;
   autoPlay?: boolean;
@@ -77,12 +83,32 @@ const HLS_CONFIG: Partial<HlsConfig> = {
 };
 
 const DEFAULT_ASPECT = 16 / 9;
-
-/** Loading splash: tv-proxy-ui/public/fifa.webp */
 const PLAYER_LOADING_IMAGE = "/fifa.webp";
 
+async function fetchPlaybackSession(
+  streamId: number,
+  linkIndex: number,
+): Promise<PlaybackSession> {
+  const response = await fetch("/api/playback/session", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ streamId, linkIndex }),
+  });
+
+  const payload = (await response.json()) as PlaybackSession & { error?: string };
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Failed to start playback.");
+  }
+
+  return payload;
+}
+
 export function StreamPlayer({
-  rawUrl,
+  streamId,
+  linkIndex,
   proxyBaseUrl,
   title,
   autoPlay = true,
@@ -100,21 +126,7 @@ export function StreamPlayer({
   const [aspectRatio, setAspectRatio] = useState(DEFAULT_ASPECT);
   const [awaitingFirstFrame, setAwaitingFirstFrame] = useState(true);
 
-  const streamConfig = useMemo(() => {
-    const parsed = parseStreamSourceFull(rawUrl);
-    return {
-      httpAuth: parsed.httpAuth,
-      drm: parsed.drm,
-      proxyUrl: toProxyStreamUrl(rawUrl, proxyBaseUrl),
-      licenseAuth: buildLicenseRequestAuth(parsed.httpAuth, parsed.drm),
-      useDash: isDashStreamUrl(rawUrl),
-      proxyBase: proxyBaseUrl.replace(/\/+$/, ""),
-    };
-  }, [rawUrl, proxyBaseUrl]);
-
-  const { httpAuth, drm, proxyUrl, licenseAuth, useDash, proxyBase } =
-    streamConfig;
-
+  const proxyBase = proxyBaseUrl.replace(/\/+$/, "");
   const statusRef = useRef<PlaybackStatus>("loading");
 
   useEffect(() => {
@@ -127,7 +139,7 @@ export function StreamPlayer({
     setStatus("loading");
     setAwaitingFirstFrame(true);
     setIsBuffering(true);
-  }, [rawUrl]);
+  }, [streamId, linkIndex]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -149,11 +161,13 @@ export function StreamPlayer({
       video.removeEventListener("loadedmetadata", syncAspect);
       video.removeEventListener("resize", syncAspect);
     };
-  }, [adaptiveFit, rawUrl, proxyUrl]);
+  }, [adaptiveFit, streamId, linkIndex]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
 
     let cancelled = false;
 
@@ -193,7 +207,7 @@ export function StreamPlayer({
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
 
-    const startPlayback = () => {
+    const startPlayback = async (session: PlaybackSession) => {
       updateStatus("loading");
       setAwaitingFirstFrame(true);
       setIsBuffering(true);
@@ -201,76 +215,83 @@ export function StreamPlayer({
       video.removeAttribute("src");
       video.load();
 
+      const {
+        playbackUrl,
+        useDash,
+        httpAuth,
+        licenseAuth,
+        drm,
+      } = session;
+
       if (useDash) {
-        void (async () => {
-          try {
-            const shakaModule =
-              (await import("shaka-player/dist/shaka-player.compiled.js")) as {
-                default: ShakaNamespace;
-              };
-            const shaka = shakaModule.default;
+        try {
+          const shakaModule =
+            (await import("shaka-player/dist/shaka-player.compiled.js")) as {
+              default: ShakaNamespace;
+            };
+          const shaka = shakaModule.default;
 
-            if (cancelled) {
-              return;
-            }
+          if (cancelled) {
+            return;
+          }
 
-            if (!shaka.Player.isBrowserSupported()) {
-              updateStatus("offline");
-              setIsBuffering(false);
-              return;
-            }
-
-            shaka.polyfill.installAll();
-
-            const player = new shaka.Player();
-            shakaRef.current = player;
-            player.attach(video);
-
-            const drmConfig = buildShakaDrmConfig(drm);
-            if (drmConfig) {
-              player.configure({ drm: drmConfig });
-            }
-
-            const requestType = shaka.net.NetworkingEngine.RequestType;
-            player
-              .getNetworkingEngine()
-              .registerRequestFilter((type, request) => {
-                const isLicense = type === requestType.LICENSE;
-
-                request.uris = request.uris.map((uri) => {
-                  if (uri.startsWith(proxyBase) || !shouldRouteThroughProxy(uri)) {
-                    return uri;
-                  }
-                  return toProxyMediaUrl(
-                    uri,
-                    proxyBaseUrl,
-                    isLicense ? licenseAuth : httpAuth,
-                  );
-                });
-              });
-
-            player.addEventListener("error", () => {
-              updateStatus("offline");
-              setIsBuffering(false);
-            });
-
-            await player.load(proxyUrl);
-
-            if (cancelled) {
-              return;
-            }
-
-            updateStatus("live");
-            setIsBuffering(false);
-
-            if (autoPlay) {
-              void video.play().catch(() => updateStatus("offline"));
-            }
-          } catch {
+          if (!shaka.Player.isBrowserSupported()) {
             updateStatus("offline");
             setIsBuffering(false);
+            return;
           }
-        })();
+
+          shaka.polyfill.installAll();
+
+          const player = new shaka.Player();
+          shakaRef.current = player;
+          player.attach(video);
+
+          const drmConfig = drm ? buildShakaDrmConfig(drm) : null;
+          if (drmConfig) {
+            player.configure({ drm: drmConfig });
+          }
+
+          const requestType = shaka.net.NetworkingEngine.RequestType;
+          player
+            .getNetworkingEngine()
+            .registerRequestFilter((type, request) => {
+              const isLicense = type === requestType.LICENSE;
+
+              request.uris = request.uris.map((uri) => {
+                if (uri.startsWith(proxyBase) || !shouldRouteThroughProxy(uri)) {
+                  return uri;
+                }
+
+                return toProxyMediaUrl(
+                  uri,
+                  proxyBaseUrl,
+                  isLicense ? licenseAuth : httpAuth,
+                );
+              });
+            });
+
+          player.addEventListener("error", () => {
+            updateStatus("offline");
+            setIsBuffering(false);
+          });
+
+          await player.load(playbackUrl);
+
+          if (cancelled) {
+            return;
+          }
+
+          updateStatus("live");
+          setIsBuffering(false);
+
+          if (autoPlay) {
+            void video.play().catch(() => updateStatus("offline"));
+          }
+        } catch {
+          updateStatus("offline");
+          setIsBuffering(false);
+        }
         return;
       }
 
@@ -310,13 +331,13 @@ export function StreamPlayer({
           setIsBuffering(false);
         });
 
-        hls.loadSource(proxyUrl);
+        hls.loadSource(playbackUrl);
         hls.attachMedia(video);
         return;
       }
 
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = proxyUrl;
+        video.src = playbackUrl;
 
         const onLoaded = () => {
           updateStatus("live");
@@ -341,7 +362,20 @@ export function StreamPlayer({
       setIsBuffering(false);
     };
 
-    startPlayback();
+    void (async () => {
+      try {
+        const session = await fetchPlaybackSession(streamId, linkIndex);
+        if (cancelled) {
+          return;
+        }
+        await startPlayback(session);
+      } catch {
+        if (!cancelled) {
+          updateStatus("offline");
+          setIsBuffering(false);
+        }
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -349,7 +383,7 @@ export function StreamPlayer({
       video.removeEventListener("playing", onPlaying);
       destroyPlayers();
     };
-  }, [autoPlay, rawUrl, streamConfig]);
+  }, [autoPlay, linkIndex, proxyBase, proxyBaseUrl, streamId]);
 
   const showLoadingSplash = awaitingFirstFrame && status !== "offline";
   const showRebuffering =

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActiveUsersPanel } from "@/components/admin/ActiveUsersPanel";
 import { AddChannelForm } from "@/components/admin/AddChannelForm";
 import { AdminChannelList } from "@/components/admin/AdminChannelList";
 import { AdminPlaylistSourceList } from "@/components/admin/AdminPlaylistSourceList";
@@ -38,6 +39,7 @@ export default async function AdminPage() {
       </header>
 
       <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+        <ActiveUsersPanel />
         <AddChannelForm />
         <AdminPlaylistSourceList sources={playlistSources} />
         <AdminChannelList channels={channels} />

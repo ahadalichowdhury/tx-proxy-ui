@@ -7,6 +7,7 @@ declare global {
     SESSION_SECRET: string;
     PROXY_BASE_URL?: string;
     NEXT_PUBLIC_PROXY_BASE_URL?: string;
+    PROXY_TOKEN_SECRET?: string;
   }
 }
 

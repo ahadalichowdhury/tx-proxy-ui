@@ -1,12 +1,11 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifyAdminPassword } from "@/lib/auth/crypto";
 import { getAdminPassword } from "@/lib/auth/env";
 import {
-  createAdminSessionCookie,
-  getClearAdminSessionCookie,
+  establishAdminSession,
+  clearAdminSessionCookies,
   isAdminAuthenticated,
 } from "@/lib/auth/session";
 
@@ -41,15 +40,13 @@ export async function loginAdmin(
     return { error: "Invalid password." };
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set(await createAdminSessionCookie());
+  await establishAdminSession();
 
   redirect("/admin");
 }
 
 export async function logoutAdmin(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.set(getClearAdminSessionCookie());
+  await clearAdminSessionCookies();
   redirect("/admin/login");
 }
 
