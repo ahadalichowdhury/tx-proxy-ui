@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050508;
+  --foreground: #f4f4f5;
+  --ott-accent: #e11d48;
+  --ott-accent-soft: rgba(225, 29, 72, 0.16);
+  --ott-panel: rgba(255, 255, 255, 0.04);
+  --ott-panel-border: rgba(255, 255, 255, 0.08);
+  --ott-glow: rgba(99, 102, 241, 0.15);
 }
 
 @theme inline {
@@ -12,15 +17,53 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(225, 29, 72, 0.28);
+}
+
+.ott-scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.ott-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.ott-glass {
+  background: var(--ott-panel);
+  border: 1px solid var(--ott-panel-border);
+  backdrop-filter: blur(20px);
+}
+
+.ott-mesh {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, var(--ott-glow), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(225, 29, 72, 0.08), transparent),
+    radial-gradient(ellipse 50% 30% at 0% 100%, rgba(14, 165, 233, 0.06), transparent),
+    var(--background);
+}
+
+.ott-poster-shine {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    transparent 40%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
 }

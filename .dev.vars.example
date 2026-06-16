@@ -1,0 +1,11 @@
+ADMIN_PASSWORD=change-me-to-a-strong-password
+SESSION_SECRET=replace-with-a-random-string-at-least-32-characters-long
+
+# Public URL of your Go proxy (must match PROXY_BASE on the proxy server).
+PROXY_BASE_URL=http://127.0.0.1:8080/proxy
+
+# Local setup:
+# 1. cp .dev.vars.example .dev.vars
+# 2. Set values above (generate secret: openssl rand -base64 48)
+# 3. Start Go proxy: cd ../tv-proxy-go && go run .
+# 4. Start UI: npm run dev  (or npm run preview for full Cloudflare D1 flow)

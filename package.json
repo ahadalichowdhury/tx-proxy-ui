@@ -6,21 +6,36 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "pages:build": "npx @cloudflare/next-on-pages",
+    "pages:dev": "wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat",
+    "preview": "npm run build && npm run pages:build && npm run pages:dev",
+    "deploy": "npm run build && npm run pages:build && wrangler pages deploy .vercel/output/static",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply tv-proxy-ui --local",
+    "db:migrate:remote": "wrangler d1 migrations apply tv-proxy-ui --remote"
   },
   "dependencies": {
-    "next": "16.2.9",
+    "drizzle-orm": "^0.44.2",
+    "hls.js": "^1.6.5",
+    "next": "15.5.2",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "shaka-player": "^4.16.35"
   },
   "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.16",
+    "@cloudflare/workers-types": "^4.20250614.0",
+    "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "15.5.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.20.0"
   }
 }
