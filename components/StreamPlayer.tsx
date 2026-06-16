@@ -602,7 +602,7 @@ export function StreamPlayer({
   return (
     <div
       ref={shellRef}
-      className={`${shellClass} group/player`}
+      className={`player-shell ${shellClass} group/player`}
       style={adaptiveFit ? { aspectRatio } : undefined}
       onMouseMove={revealControls}
       onTouchStart={revealControls}

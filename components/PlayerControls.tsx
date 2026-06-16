@@ -2,6 +2,10 @@
 
 import type { QualityOption } from "@/lib/player/quality";
 import { selectedQualityLabel } from "@/lib/player/quality";
+import {
+  lockPlayerLandscape,
+  unlockPlayerOrientation,
+} from "@/lib/player/fullscreen";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type PlayerControlsProps = {
@@ -160,6 +164,21 @@ export function PlayerControls({
   }, [closeMenu, menuView]);
 
   useEffect(() => {
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        unlockPlayerOrientation();
+      }
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      unlockPlayerOrientation();
+    };
+  }, []);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) {
       return;
@@ -204,18 +223,24 @@ export function PlayerControls({
     video.muted = !video.muted;
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     const container = containerRef.current;
     if (!container) {
       return;
     }
 
     if (document.fullscreenElement) {
-      void document.exitFullscreen();
+      await document.exitFullscreen();
+      unlockPlayerOrientation();
       return;
     }
 
-    void container.requestFullscreen();
+    try {
+      await container.requestFullscreen();
+      await lockPlayerLandscape();
+    } catch {
+      unlockPlayerOrientation();
+    }
   };
 
   if (!visible) {
@@ -264,12 +289,12 @@ export function PlayerControls({
             </button>
 
             {menuView !== "closed" ? (
-              <div className="absolute bottom-full right-0 mb-2 min-w-[220px] overflow-hidden rounded-lg bg-[#212121]/98 py-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-md">
+              <div className="absolute bottom-full right-0 mb-1.5 max-h-32 min-w-[132px] overflow-y-auto rounded-md bg-[#212121]/98 py-0.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-md sm:mb-2 sm:max-h-none sm:min-w-[220px] sm:rounded-lg sm:py-1">
                 {menuView === "main" ? (
                   <button
                     type="button"
                     onClick={() => setMenuView("quality")}
-                    className="flex w-full items-center justify-between gap-4 px-4 py-2.5 text-left text-sm text-white transition hover:bg-white/10"
+                    className="flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left text-xs text-white transition hover:bg-white/10 sm:gap-4 sm:px-4 sm:py-2.5 sm:text-sm"
                   >
                     <span>Quality</span>
                     <span className="flex items-center gap-0.5 text-zinc-400">
@@ -282,7 +307,7 @@ export function PlayerControls({
                     <button
                       type="button"
                       onClick={() => setMenuView("main")}
-                      className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2.5 text-left text-sm font-medium text-white transition hover:bg-white/10"
+                      className="flex w-full items-center gap-1.5 border-b border-white/10 px-2.5 py-1.5 text-left text-xs font-medium text-white transition hover:bg-white/10 sm:gap-2 sm:px-3 sm:py-2.5 sm:text-sm"
                     >
                       <BackIcon />
                       Quality
@@ -298,14 +323,14 @@ export function PlayerControls({
                             onQualitySelect(option.id);
                             closeMenu();
                           }}
-                          className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition ${
+                          className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs transition sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm ${
                             isSelected
                               ? "bg-white/10 text-white"
                               : "text-zinc-200 hover:bg-white/5"
                           }`}
                         >
                           <span
-                            className={`w-4 ${isSelected ? "opacity-100" : "opacity-0"}`}
+                            className={`w-3.5 sm:w-4 ${isSelected ? "opacity-100" : "opacity-0"}`}
                           >
                             <CheckIcon />
                           </span>

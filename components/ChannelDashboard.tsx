@@ -14,30 +14,22 @@ type ChannelDashboardProps = {
   proxyBaseUrl: string;
 };
 
-function ChannelLogo({
+function ChannelCardLogo({
   title,
   logo,
-  size = "md",
 }: {
   title: string;
   logo: string | null | undefined;
-  size?: "sm" | "md" | "lg";
 }) {
   const [failed, setFailed] = useState(false);
   const showLogo = isValidLogoUrl(logo) && !failed;
-  const sizeClass =
-    size === "sm"
-      ? "h-10 w-10 rounded-lg"
-      : size === "lg"
-        ? "h-16 w-16 rounded-2xl"
-        : "h-12 w-12 rounded-xl";
 
   if (showLogo) {
     return (
       <img
         src={logo}
         alt=""
-        className={`${sizeClass} shrink-0 object-cover ring-1 ring-white/10`}
+        className="h-10 w-full max-w-[88px] object-contain"
         loading="lazy"
         onError={() => setFailed(true)}
       />
@@ -45,100 +37,83 @@ function ChannelLogo({
   }
 
   return (
-    <div
-      className={`${sizeClass} flex shrink-0 items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-950 text-xs font-bold text-zinc-400 ring-1 ring-white/10`}
-    >
+    <span className="text-lg font-bold text-zinc-500">
       {title.charAt(0).toUpperCase()}
-    </div>
+    </span>
   );
 }
 
-function ChannelListItem({
+function ChannelCard({
   channel,
   isActive,
-  isPlaying,
+  isLive,
   onSelect,
 }: {
   channel: PublicChannel;
   isActive: boolean;
-  isPlaying: boolean;
+  isLive: boolean;
   onSelect: () => void;
 }) {
-  const linkCount = channel.links.length;
+  const sourceCount = channel.links.length;
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+      className={`group flex h-[140px] w-full flex-col overflow-hidden rounded-xl bg-[#111827] text-left ring-1 transition hover:bg-[#151f31] ${
         isActive
-          ? "bg-rose-500/15 ring-1 ring-rose-500/40"
-          : "hover:bg-white/5"
+          ? "ring-2 ring-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.15)]"
+          : "ring-white/5 hover:ring-white/10"
       }`}
     >
-      <ChannelLogo title={channel.title} logo={channel.logo} size="sm" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p
-            className={`truncate text-sm font-semibold ${
-              isActive ? "text-white" : "text-zinc-200"
-            }`}
-          >
-            {channel.title}
-          </p>
-          {isPlaying ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
-              <span className="h-1 w-1 animate-pulse rounded-full bg-white" />
+      <div className="relative flex h-[72px] shrink-0 items-center justify-center bg-[#0a0f18] px-3">
+        {isActive && isLive ? (
+          <>
+            <div className="absolute inset-0 bg-emerald-500/15" aria-hidden />
+            <span className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-md bg-emerald-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black">
               Live
             </span>
-          ) : null}
-        </div>
-        <p className="mt-0.5 truncate text-[11px] text-zinc-500">
-          {channel.groupTitle ?? "Live TV"}
-          {linkCount > 1 ? ` · ${linkCount} links` : ""}
+          </>
+        ) : null}
+        <ChannelCardLogo title={channel.title} logo={channel.logo} />
+      </div>
+
+      <div className="flex h-[68px] shrink-0 flex-col px-2.5 py-2">
+        <p
+          className={`line-clamp-2 h-[34px] text-[11px] font-semibold leading-[17px] ${
+            isActive ? "text-white" : "text-zinc-200"
+          }`}
+        >
+          {channel.title}
+        </p>
+        <p className="mt-auto h-[14px] text-[10px] leading-[14px] text-zinc-500">
+          {sourceCount > 1 ? `${sourceCount} sources` : "\u00A0"}
         </p>
       </div>
     </button>
   );
 }
 
-function SearchIcon() {
+function CategorySectionHeader({
+  title,
+  count,
+}: {
+  title: string;
+  count: number;
+}) {
   return (
-    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden>
-      <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M13.5 13.5L17 17"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function TheaterIcon({ expanded }: { expanded: boolean }) {
-  if (expanded) {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
-        <path
-          d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
-      <path
-        d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
+    <div className="mb-3 flex items-center gap-3">
+      <div className="h-px flex-1 bg-emerald-500/35" />
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+          {title}
+        </span>
+        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#1a1f2e] px-1.5 text-[10px] font-semibold text-zinc-400 ring-1 ring-white/5">
+          {count}
+        </span>
+      </div>
+      <div className="h-px flex-1 bg-emerald-500/35" />
+    </div>
   );
 }
 
@@ -155,10 +130,10 @@ function CategoryPill({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+      className={`shrink-0 rounded-full px-4 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${
         isActive
-          ? "bg-white text-black"
-          : "border border-white/10 bg-white/5 text-zinc-400 hover:text-white"
+          ? "bg-emerald-400 text-black shadow-[0_0_16px_rgba(52,211,153,0.25)]"
+          : "bg-[#111827] text-zinc-400 ring-1 ring-white/5 hover:text-white"
       }`}
     >
       {label}
@@ -180,40 +155,19 @@ export function ChannelDashboard({ channels, proxyBaseUrl }: ChannelDashboardPro
   const [selectedLinkIndex, setSelectedLinkIndex] = useState(0);
   const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>("loading");
   const [activeCategory, setActiveCategory] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [theaterMode, setTheaterMode] = useState(false);
 
   const selectedStream =
     channels.find((stream) => stream.id === selectedId) ?? null;
 
   const filteredGroups = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
     return groupedChannels
       .filter(
         (group) => activeCategory === "All" || group.groupTitle === activeCategory,
       )
-      .map((group) => ({
-        ...group,
-        channels: group.channels.filter((channel) => {
-          if (!query) return true;
-          return (
-            channel.title.toLowerCase().includes(query) ||
-            (channel.groupTitle ?? "").toLowerCase().includes(query)
-          );
-        }),
-      }))
       .filter((group) => group.channels.length > 0);
-  }, [activeCategory, groupedChannels, searchQuery]);
+  }, [activeCategory, groupedChannels]);
 
-  const visibleCount = filteredGroups.reduce(
-    (total, group) => total + group.channels.length,
-    0,
-  );
-
-  const playerMaxHeight = theaterMode
-    ? "max-h-[min(62vh,720px)]"
-    : "max-h-[min(42vh,520px)] sm:max-h-[min(44vh,540px)]";
+  const playerMaxHeight = "max-h-[min(38vh,420px)] lg:max-h-none lg:min-h-0";
 
   const selectChannel = (id: number) => {
     setSelectedId(id);
@@ -226,81 +180,59 @@ export function ChannelDashboard({ channels, proxyBaseUrl }: ChannelDashboardPro
   }, []);
 
   return (
-    <div className="ott-mesh flex h-screen flex-col overflow-hidden">
-      <header className="z-40 shrink-0 border-b border-white/5 bg-[#050508]/90 backdrop-blur-xl">
-        <div className="flex items-center gap-3 px-4 py-2.5 sm:gap-4 sm:px-5">
-          <div className="flex shrink-0 items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-indigo-600">
-              <span className="text-xs font-black text-white">TV</span>
-            </div>
-            <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-white">Live TV</p>
-              <p className="text-[10px] text-zinc-500">{channels.length} channels</p>
-            </div>
+    <div className="flex h-screen flex-col overflow-hidden bg-black">
+      <header className="z-40 shrink-0 border-b border-white/5 bg-black/95 px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500 shadow-[0_0_20px_rgba(52,211,153,0.3)]">
+            <span className="text-sm font-black text-black">TV</span>
           </div>
+          <div>
+            <p className="text-base font-bold text-white">Live TV</p>
+            <p className="text-[11px] text-zinc-500">
+              {channels.length} channels
+            </p>
+          </div>
+        </div>
 
-          <div className="relative min-w-0 flex-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
-              <SearchIcon />
-            </span>
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search channels..."
-              className="w-full rounded-full border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-rose-500/40 focus:ring-1 focus:ring-rose-500/30"
+        <div className="ott-scrollbar-hide mt-3 flex gap-2 overflow-x-auto pb-0.5">
+          <CategoryPill
+            label="All"
+            isActive={activeCategory === "All"}
+            onClick={() => setActiveCategory("All")}
+          />
+          {categories.map((category) => (
+            <CategoryPill
+              key={category}
+              label={category}
+              isActive={activeCategory === category}
+              onClick={() => setActiveCategory(category)}
             />
-          </div>
+          ))}
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <aside className="order-2 flex min-h-0 flex-1 flex-col border-t border-white/5 lg:order-1 lg:w-[min(400px,36vw)] lg:flex-none lg:border-t-0 lg:border-r">
-          <div className="shrink-0 border-b border-white/5 px-3 py-2.5 sm:px-4">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Channels
-              </p>
-              <p className="text-[11px] text-zinc-500">{visibleCount} shown</p>
-            </div>
-            <div className="ott-scrollbar-hide flex gap-1.5 overflow-x-auto pb-0.5">
-              <CategoryPill
-                label="All"
-                isActive={activeCategory === "All"}
-                onClick={() => setActiveCategory("All")}
-              />
-              {categories.map((category) => (
-                <CategoryPill
-                  key={category}
-                  label={category}
-                  isActive={activeCategory === category}
-                  onClick={() => setActiveCategory(category)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">
+        <main className="order-2 flex min-h-0 flex-1 flex-col lg:order-1">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
             {filteredGroups.length === 0 ? (
-              <p className="px-2 py-8 text-center text-sm text-zinc-500">
-                No channels match your search.
+              <p className="py-12 text-center text-sm text-zinc-500">
+                No channels in this category.
               </p>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-8">
                 {filteredGroups.map(({ groupTitle, channels: groupItems }) => (
                   <section key={groupTitle}>
-                    {activeCategory === "All" ? (
-                      <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                        {groupTitle}
-                      </p>
-                    ) : null}
-                    <ul className="space-y-0.5">
+                    <CategorySectionHeader
+                      title={groupTitle}
+                      count={groupItems.length}
+                    />
+                    <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                       {groupItems.map((channel) => (
-                        <li key={channel.id}>
-                          <ChannelListItem
+                        <li key={channel.id} className="min-h-[140px]">
+                          <ChannelCard
                             channel={channel}
                             isActive={channel.id === selectedId}
-                            isPlaying={
+                            isLive={
                               channel.id === selectedId &&
                               playbackStatus === "live"
                             }
@@ -314,150 +246,98 @@ export function ChannelDashboard({ channels, proxyBaseUrl }: ChannelDashboardPro
               </div>
             )}
           </div>
-        </aside>
+        </main>
 
-        <section className="order-1 flex min-h-0 flex-col lg:order-2 lg:min-w-0 lg:flex-1">
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            {selectedStream && isValidLogoUrl(selectedStream.logo) ? (
-              <div
-                className="pointer-events-none absolute inset-0 opacity-[0.18]"
-                aria-hidden
-              >
-                <img
-                  src={selectedStream.logo!}
-                  alt=""
-                  className="h-full w-full scale-110 object-cover blur-3xl"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-[#050508]/40 via-[#050508]/70 to-[#050508]" />
-              </div>
+        <aside className="order-1 flex w-full shrink-0 flex-col border-b border-white/5 bg-[#050508] lg:order-2 lg:sticky lg:top-0 lg:h-[calc(100vh-7.25rem)] lg:w-[min(400px,34vw)] lg:self-start lg:border-b-0 lg:border-l lg:overflow-y-auto">
+          <div className="flex flex-col p-3 sm:p-4">
+            {selectedStream ? (
+              <>
+                <div className="overflow-hidden rounded-xl ring-1 ring-white/10">
+                  <StreamPlayer
+                    key={`${selectedStream.id}-${selectedLinkIndex}`}
+                    streamId={selectedStream.id}
+                    linkIndex={selectedLinkIndex}
+                    title={selectedStream.title}
+                    proxyBaseUrl={proxyBaseUrl}
+                    onStatusChange={handlePlaybackStatusChange}
+                    adaptiveFit
+                    maxHeightClass={playerMaxHeight}
+                  />
+                </div>
+
+                <div className="mt-3 rounded-xl bg-[#111827] px-3 py-2.5 ring-1 ring-white/5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-white">
+                        {selectedStream.title}
+                      </p>
+                      {selectedStream.groupTitle ? (
+                        <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/80">
+                          {selectedStream.groupTitle}
+                        </p>
+                      ) : null}
+                    </div>
+                    <StatusBadge
+                      status={playbackStatus}
+                      variant={playbackStatus === "live" ? "broadcast" : "default"}
+                      className="shrink-0 px-2.5 py-1 text-[10px] tracking-wide"
+                    />
+                  </div>
+                </div>
+
+                {selectedStream.links.length > 1 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedStream.links.map((link) => {
+                      const isActive = link.index === selectedLinkIndex;
+
+                      return (
+                        <button
+                          key={`${selectedStream.id}-${link.label}-${link.index}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedLinkIndex(link.index);
+                            setPlaybackStatus("loading");
+                          }}
+                          className={`rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                            isActive
+                              ? "bg-emerald-400 text-black"
+                              : "bg-[#111827] text-zinc-400 ring-1 ring-white/5 hover:text-white"
+                          }`}
+                        >
+                          {link.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div
-                className="pointer-events-none absolute inset-0 bg-gradient-to-br from-rose-500/5 via-transparent to-indigo-500/5"
-                aria-hidden
-              />
-            )}
-
-            <div className="relative flex min-h-0 flex-1 flex-col justify-center px-3 py-3 sm:px-6 sm:py-5">
-              {selectedStream ? (
-                <div
-                  className={`relative mx-auto w-full transition-all duration-500 ease-out ${
-                    theaterMode ? "max-w-none" : "max-w-4xl"
-                  }`}
-                >
-                  <div
-                    className={`overflow-hidden rounded-2xl bg-black shadow-2xl transition-all duration-500 ${
-                      playbackStatus === "live"
-                        ? "shadow-rose-500/20 ring-1 ring-rose-500/35"
-                        : "ring-1 ring-white/10 shadow-black/50"
-                    }`}
-                  >
-                    <StreamPlayer
-                      key={`${selectedStream.id}-${selectedLinkIndex}`}
-                      streamId={selectedStream.id}
-                      linkIndex={selectedLinkIndex}
-                      title={selectedStream.title}
-                      proxyBaseUrl={proxyBaseUrl}
-                      onStatusChange={handlePlaybackStatusChange}
-                      adaptiveFit
-                      maxHeightClass={playerMaxHeight}
-                    />
+                className="flex items-center justify-center rounded-xl border border-dashed border-white/10 bg-[#111827]/50"
+                style={{ aspectRatio: 16 / 9 }}
+              >
+                <div className="px-6 text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#0a0f18] ring-1 ring-white/10">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="h-6 w-6 text-zinc-500"
+                      aria-hidden
+                    >
+                      <polygon points="10,8 16,12 10,16" fill="currentColor" />
+                    </svg>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setTheaterMode((value) => !value)}
-                    className="absolute right-3 top-3 hidden rounded-full border border-white/15 bg-black/60 p-2 text-zinc-200 backdrop-blur-md transition hover:bg-black/80 hover:text-white lg:inline-flex"
-                    title={theaterMode ? "Compact player" : "Theater mode"}
-                  >
-                    <TheaterIcon expanded={theaterMode} />
-                  </button>
-                </div>
-              ) : (
-                <div className="mx-auto w-full max-w-2xl">
-                  <div
-                    className="flex items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/30 px-6 py-16 backdrop-blur-sm"
-                    style={{ aspectRatio: 16 / 9 }}
-                  >
-                    <div className="text-center">
-                      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          className="h-7 w-7 text-zinc-400"
-                          aria-hidden
-                        >
-                          <polygon
-                            points="10,8 16,12 10,16"
-                            fill="currentColor"
-                          />
-                        </svg>
-                      </div>
-                      <p className="text-base font-semibold text-white">
-                        Select a channel
-                      </p>
-                      <p className="mt-1 text-sm text-zinc-500">
-                        Full stream · no crop · channel list stays visible
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {selectedStream ? (
-              <div className="relative shrink-0 border-t border-white/10 bg-black/40 px-3 py-3 backdrop-blur-xl sm:px-6">
-                <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <ChannelLogo
-                      title={selectedStream.title}
-                      logo={selectedStream.logo}
-                      size="md"
-                    />
-                    <div className="min-w-0">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <StatusBadge status={playbackStatus} variant="broadcast" />
-                        {selectedStream.groupTitle ? (
-                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                            {selectedStream.groupTitle}
-                          </span>
-                        ) : null}
-                      </div>
-                      <h1 className="truncate text-sm font-bold text-white sm:text-base">
-                        {selectedStream.title}
-                      </h1>
-                    </div>
-                  </div>
-
-                  {selectedStream.links.length > 1 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedStream.links.map((link) => {
-                        const isActive = link.index === selectedLinkIndex;
-
-                        return (
-                          <button
-                            key={`${selectedStream.id}-${link.label}-${link.index}`}
-                            type="button"
-                            onClick={() => {
-                              setSelectedLinkIndex(link.index);
-                              setPlaybackStatus("loading");
-                            }}
-                            className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
-                              isActive
-                                ? "bg-white text-black"
-                                : "border border-white/10 bg-white/5 text-zinc-400 hover:text-white"
-                            }`}
-                          >
-                            {link.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
+                  <p className="text-sm font-semibold text-white">
+                    Select a channel
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Pick from the grid to start watching
+                  </p>
                 </div>
               </div>
-            ) : null}
+            )}
           </div>
-        </section>
+        </aside>
       </div>
     </div>
   );
