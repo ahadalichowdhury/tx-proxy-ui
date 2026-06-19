@@ -62,6 +62,10 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+export function isStreamHttpUrl(value: string): boolean {
+  return isHttpUrl(value);
+}
+
 function splitAuthPair(part: string): { key: string; value: string } | null {
   const trimmed = part.trim();
   if (!trimmed) {
@@ -377,12 +381,15 @@ export function parseStreamSourceParts(source: string): {
   const pipeIndex = trimmed.indexOf("|");
   if (pipeIndex < 0) {
     const { url, headers } = extractHeaderQueryParams(trimmed);
-    return { url: unwrapEmbeddedStreamUrl(url), headers };
+    return {
+      url: isHttpUrl(unwrapEmbeddedStreamUrl(url)) ? unwrapEmbeddedStreamUrl(url) : "",
+      headers,
+    };
   }
 
   const candidateUrl = trimmed.slice(0, pipeIndex).trim();
   if (!isHttpUrl(candidateUrl)) {
-    return { url: trimmed, headers: {} };
+    return { url: "", headers: {} };
   }
 
   const { url, headers: queryHeaders } = extractHeaderQueryParams(candidateUrl);

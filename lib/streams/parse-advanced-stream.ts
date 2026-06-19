@@ -319,7 +319,7 @@ export function parseExtHttpLine(line: string): StreamHeaderMap | null {
 
 export function parseKodiLicenseLine(line: string): StreamDrmConfig | null {
   const licenseKeyMatch = line.match(
-    /^#KODIPROP:inputstream\.adaptive\.license_key=(.+)$/i,
+    /^#?KODIPROP:inputstream\.adaptive\.license_key=(.+)$/i,
   );
   if (licenseKeyMatch?.[1]?.trim()) {
     const raw = licenseKeyMatch[1].trim();
@@ -334,18 +334,18 @@ export function parseKodiLicenseLine(line: string): StreamDrmConfig | null {
     if (Object.keys(pairs).length > 0) {
       return { scheme: "clearkey", clearKeys: pairs };
     }
-    return { licenseUrl: raw };
+    return null;
   }
 
   const licenseTypeMatch = line.match(
-    /^#KODIPROP:inputstream\.adaptive\.license_type=(.+)$/i,
+    /^#?KODIPROP:inputstream\.adaptive\.license_type=(.+)$/i,
   );
   if (licenseTypeMatch?.[1]?.trim()) {
     return { scheme: normalizeDrmScheme(licenseTypeMatch[1].trim()) };
   }
 
   const manifestTypeMatch = line.match(
-    /^#KODIPROP:inputstream\.adaptive\.manifest_type=(.+)$/i,
+    /^#?KODIPROP:inputstream\.adaptive\.manifest_type=(.+)$/i,
   );
   if (manifestTypeMatch?.[1]?.trim()) {
     return {};

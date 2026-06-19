@@ -1,6 +1,6 @@
 "use client";
 
-import { toProxyMediaUrl, shouldRouteThroughProxy } from "@/lib/proxy";
+import { toProxyMediaUrl, shouldRouteThroughProxy, resolveStreamMediaUri } from "@/lib/proxy";
 import { buildShakaDrmConfig } from "@/lib/proxy/parse";
 import {
   buildQualityOptionsFromHeights,
@@ -64,6 +64,7 @@ export type PlaybackStatus = "loading" | "live" | "offline";
 
 type PlaybackSession = {
   playbackUrl: string;
+  sourceUrl: string;
   tokenized: boolean;
   useDash: boolean;
   httpAuth: string;
@@ -159,6 +160,22 @@ async function fetchPlaybackSession(
   }
 
   return payload;
+}
+
+async function tryAutoplay(video: HTMLVideoElement): Promise<void> {
+  try {
+    await video.play();
+    return;
+  } catch {
+    // Browser autoplay policy — retry muted; do not mark stream offline.
+  }
+
+  video.muted = true;
+  try {
+    await video.play();
+  } catch {
+    // User can press play on controls.
+  }
 }
 
 export function StreamPlayer({
@@ -324,6 +341,7 @@ export function StreamPlayer({
 
       const {
         playbackUrl,
+        sourceUrl,
         useDash,
         httpAuth,
         licenseAuth,
@@ -367,12 +385,13 @@ export function StreamPlayer({
               const isLicense = type === requestType.LICENSE;
 
               request.uris = request.uris.map((uri) => {
-                if (uri.startsWith(proxyBase) || !shouldRouteThroughProxy(uri)) {
-                  return uri;
+                const resolved = resolveStreamMediaUri(uri, sourceUrl);
+                if (resolved.startsWith(proxyBase) || !shouldRouteThroughProxy(resolved)) {
+                  return resolved;
                 }
 
                 return toProxyMediaUrl(
-                  uri,
+                  resolved,
                   proxyBaseUrl,
                   isLicense ? licenseAuth : httpAuth,
                 );
@@ -425,7 +444,7 @@ export function StreamPlayer({
           setIsBuffering(false);
 
           if (autoPlay) {
-            void video.play().catch(() => updateStatus("offline"));
+            void tryAutoplay(video);
           }
         } catch {
           updateStatus("offline");
@@ -472,9 +491,7 @@ export function StreamPlayer({
           updateStatus("live");
           setIsBuffering(false);
           if (autoPlay) {
-            void video.play().catch(() => {
-              updateStatus("offline");
-            });
+            void tryAutoplay(video);
           }
         });
 
@@ -549,7 +566,7 @@ export function StreamPlayer({
           updateStatus("live");
           setIsBuffering(false);
           if (autoPlay) {
-            void video.play().catch(() => updateStatus("offline"));
+            void tryAutoplay(video);
           }
         };
 

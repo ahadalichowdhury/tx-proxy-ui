@@ -1,4 +1,5 @@
 import { parseStreamSource } from "@/lib/proxy/parse";
+import { isStreamHttpUrl } from "@/lib/streams/stream-source";
 
 export { parseStreamSource } from "@/lib/proxy/parse";
 
@@ -7,6 +8,10 @@ export function toProxyMediaUrl(
   proxyBaseUrl: string,
   streamAuth?: string,
 ): string {
+  if (!isStreamHttpUrl(mediaUrl)) {
+    return mediaUrl;
+  }
+
   const base = proxyBaseUrl.replace(/\/+$/, "");
   let result = `${base}?url=${encodeURIComponent(mediaUrl)}`;
   if (streamAuth) {
@@ -18,6 +23,24 @@ export function toProxyMediaUrl(
 export function toProxyStreamUrl(rawUrl: string, proxyBaseUrl: string): string {
   const { url, httpAuth } = parseStreamSource(rawUrl);
   return toProxyMediaUrl(url, proxyBaseUrl, httpAuth);
+}
+
+/** Resolve relative DASH/HLS media URLs against the upstream manifest URL. */
+export function resolveStreamMediaUri(uri: string, manifestUrl: string): string {
+  const trimmed = uri.trim();
+  if (!trimmed) {
+    return uri;
+  }
+
+  if (shouldRouteThroughProxy(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    return new URL(trimmed, manifestUrl).href;
+  } catch {
+    return uri;
+  }
 }
 
 export function normalizeProxyBaseUrl(value: string): string {

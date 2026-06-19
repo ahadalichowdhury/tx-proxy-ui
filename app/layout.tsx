@@ -15,11 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IPTV Proxy Dashboard",
-  description: "Modern IPTV streaming dashboard with proxied HLS playback.",
-  icons: {
-    icon: "/globe.svg",
-  },
+  title: "IPTV Player",
+  description: "IPTV Player",
 };
 
 export default function RootLayout({

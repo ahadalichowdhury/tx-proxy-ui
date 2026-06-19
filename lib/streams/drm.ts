@@ -8,6 +8,7 @@ import {
   headersToAuthString,
   mergeHeaderMaps,
   parseHeaderAssignmentString,
+  isStreamHttpUrl,
   type StreamHeaderMap,
 } from "@/lib/streams/stream-source";
 
@@ -354,8 +355,6 @@ export function parseDrmFromHeaderMap(headers: StreamHeaderMap): StreamDrmConfig
       if (Object.keys(pairs).length > 0) {
         config.clearKeys = { ...config.clearKeys, ...pairs };
         config.scheme = config.scheme ?? "clearkey";
-      } else {
-        config.licenseUrl = raw;
       }
     }
   }
@@ -530,14 +529,23 @@ export function buildShakaDrmConfig(drm: StreamDrmConfig): ShakaDrmConfiguration
     }
   }
 
-  if (drm.licenseUrl && drm.scheme && drm.scheme !== "clearkey") {
+  if (
+    drm.licenseUrl &&
+    isStreamHttpUrl(drm.licenseUrl) &&
+    drm.scheme &&
+    drm.scheme !== "clearkey"
+  ) {
     config.servers = {
       [shakaDrmSystemId(drm.scheme)]: drm.licenseUrl,
     };
-  } else if (drm.licenseUrl && !drm.scheme) {
+  } else if (drm.licenseUrl && isStreamHttpUrl(drm.licenseUrl) && !drm.scheme) {
     config.servers = {
       [shakaDrmSystemId("widevine")]: drm.licenseUrl,
     };
+  }
+
+  if (!config.clearKeys && !config.servers) {
+    return null;
   }
 
   return config;

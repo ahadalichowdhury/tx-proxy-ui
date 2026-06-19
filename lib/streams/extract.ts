@@ -251,6 +251,10 @@ function resolveStreamUrl(
     return null;
   }
 
+  if (!isHttpUrl(resolvedUrl)) {
+    return null;
+  }
+
   const mergedDrm = mergeDrmConfig(inlineDrm, pendingDrm);
   const merged = mergeHeaderMaps(
     inlineHeaders,
@@ -427,6 +431,20 @@ function parsePlaylist(
     if (kodiLicense) {
       pendingDrm = mergeDrmConfig(pendingDrm, kodiLicense);
       continue;
+    }
+
+    if (/^KODIPROP:/i.test(line)) {
+      const normalizedLine = `#${line}`;
+      const normalizedHeaders = parseKodiPropLine(normalizedLine);
+      if (normalizedHeaders && Object.keys(normalizedHeaders).length > 0) {
+        pendingHeaders = { ...pendingHeaders, ...normalizedHeaders };
+        continue;
+      }
+      const normalizedLicense = parseKodiLicenseLine(normalizedLine);
+      if (normalizedLicense) {
+        pendingDrm = mergeDrmConfig(pendingDrm, normalizedLicense);
+        continue;
+      }
     }
 
     if (line.startsWith("#")) {

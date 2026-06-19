@@ -10,6 +10,7 @@ import { getProxyBaseUrl } from "@/lib/proxy/server";
 import { toProxyStreamUrl } from "@/lib/proxy";
 import { getStreamSourceAtLink } from "@/lib/streams/public-channel";
 import { hasDrmConfig } from "@/lib/streams/drm";
+import { isStreamHttpUrl } from "@/lib/streams/stream-source";
 
 export const runtime = "edge";
 
@@ -20,6 +21,7 @@ type SessionRequest = {
 
 export type PlaybackSessionResponse = {
   playbackUrl: string;
+  sourceUrl: string;
   tokenized: boolean;
   useDash: boolean;
   httpAuth: string;
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     const parsed = parseStreamSourceFull(rawSource);
-    if (!parsed.url) {
+    if (!parsed.url || !isStreamHttpUrl(parsed.url)) {
       return Response.json({ error: "Stream URL is invalid." }, { status: 400 });
     }
 
@@ -77,6 +79,7 @@ export async function POST(request: Request) {
 
     const response: PlaybackSessionResponse = {
       playbackUrl,
+      sourceUrl: parsed.url,
       tokenized,
       useDash: isDashStreamUrl(rawSource),
       httpAuth: parsed.httpAuth,

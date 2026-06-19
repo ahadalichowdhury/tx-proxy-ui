@@ -1,24 +1,20 @@
-const GAMES_API = "https://worldcup26.ir/get/games";
-/** API local_date is US Eastern (WC 2026 host kickoff time). */
-const SOURCE_TIMEZONE = "America/New_York";
+const MATCHES_API =
+  "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
 const DISPLAY_TIMEZONE = "Asia/Dhaka";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 20_000;
 const UPCOMING_MATCH_LIMIT = 4;
+const LIVE_WINDOW_MS = 105 * 60 * 1000;
 
-export type RawGame = {
-  id: string;
-  home_team_name_en?: string;
-  away_team_name_en?: string;
-  home_team_label?: string;
-  away_team_label?: string;
-  home_score?: string;
-  away_score?: string;
+export type RawMatch = {
+  round?: string;
+  date?: string;
+  time?: string;
+  team1?: string;
+  team2?: string;
+  score?: { ft?: [number, number]; ht?: [number, number] };
   group?: string;
-  local_date?: string;
-  finished?: string;
-  time_elapsed?: string;
-  type?: string;
+  ground?: string;
 };
 
 export type TodayMatch = {
@@ -34,8 +30,9 @@ export type TodayMatch = {
   kickoffTimestamp: number;
 };
 
-type GamesResponse = {
-  games?: RawGame[];
+type WorldCupResponse = {
+  name?: string;
+  matches?: RawMatch[];
 };
 
 type CacheEntry = {
@@ -46,76 +43,57 @@ type CacheEntry = {
 
 let memoryCache: CacheEntry | null = null;
 
-function zonedWallClockToUtc(
-  year: number,
-  month: number,
-  day: number,
-  hour: number,
-  minute: number,
-  timeZone: string,
-): Date {
-  let utcMs = Date.UTC(year, month - 1, day, hour, minute, 0);
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date(utcMs));
-
-    const read = (type: Intl.DateTimeFormatPartTypes) =>
-      Number(parts.find((part) => part.type === type)?.value ?? "0");
-
-    const zonedYear = read("year");
-    const zonedMonth = read("month");
-    const zonedDay = read("day");
-    const zonedHour = read("hour");
-    const zonedMinute = read("minute");
-
-    const desiredTotal = Date.UTC(year, month - 1, day, hour, minute);
-    const actualTotal = Date.UTC(
-      zonedYear,
-      zonedMonth - 1,
-      zonedDay,
-      zonedHour,
-      zonedMinute,
-    );
-    const diffMs = desiredTotal - actualTotal;
-
-    if (diffMs === 0) {
-      break;
-    }
-
-    utcMs += diffMs;
-  }
-
-  return new Date(utcMs);
-}
-
-function parseLocalDate(value: string | undefined): Date | null {
-  if (!value?.trim()) {
-    return null;
-  }
-
-  const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/);
+function parseUtcOffsetMinutes(value: string): number | null {
+  const match = value.trim().match(/^UTC([+-])(\d{1,2})(?::(\d{2}))?$/i);
   if (!match) {
     return null;
   }
 
-  const [, month, day, year, hour, minute] = match;
-  const parsed = zonedWallClockToUtc(
-    Number(year),
-    Number(month),
-    Number(day),
-    Number(hour),
-    Number(minute),
-    SOURCE_TIMEZONE,
-  );
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3] ?? "0");
 
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return null;
+  }
+
+  return sign * (hours * 60 + minutes);
+}
+
+export function parseMatchKickoff(
+  date: string | undefined,
+  time: string | undefined,
+): Date | null {
+  if (!date?.trim() || !time?.trim()) {
+    return null;
+  }
+
+  const dateMatch = date.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = time.trim().match(/^(\d{2}):(\d{2})\s+(UTC[+-]\d{1,2}(?::\d{2})?)$/i);
+
+  if (!dateMatch || !timeMatch) {
+    return null;
+  }
+
+  const [, year, month, day] = dateMatch;
+  const [, hour, minute, offsetLabel] = timeMatch;
+  const offsetMinutes = parseUtcOffsetMinutes(offsetLabel);
+
+  if (offsetMinutes === null) {
+    return null;
+  }
+
+  const utcMs =
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+    ) -
+    offsetMinutes * 60 * 1000;
+
+  const parsed = new Date(utcMs);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
@@ -132,68 +110,67 @@ function formatKickoffDhaka(date: Date): string {
   }).format(date);
 }
 
-function parseScore(value: string | undefined): number | null {
-  if (!value || value === "null") {
-    return null;
+function normalizeGroup(value: string | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return "—";
   }
 
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? null : parsed;
+  return trimmed.replace(/^Group\s+/i, "");
 }
 
-function teamName(game: RawGame, side: "home" | "away"): string {
-  if (side === "home") {
-    return (
-      game.home_team_name_en?.trim() ||
-      game.home_team_label?.trim() ||
-      "TBD"
-    );
-  }
-
-  return (
-    game.away_team_name_en?.trim() ||
-    game.away_team_label?.trim() ||
-    "TBD"
-  );
+function matchId(match: RawMatch): string {
+  return [
+    match.date ?? "unknown-date",
+    match.time ?? "unknown-time",
+    match.team1 ?? "tbd",
+    match.team2 ?? "tbd",
+  ]
+    .join("-")
+    .replace(/\s+/g, "-")
+    .toLowerCase();
 }
 
-function isFinished(game: RawGame): boolean {
-  const finished = game.finished?.toUpperCase() === "TRUE";
-  const elapsed = game.time_elapsed?.toLowerCase() ?? "";
-  return finished || elapsed === "finished";
+function isFinished(match: RawMatch): boolean {
+  const ft = match.score?.ft;
+  return Array.isArray(ft) && ft.length === 2;
 }
 
-function matchStatus(game: RawGame): {
+function matchStatus(
+  match: RawMatch,
+  kickoff: Date,
+  now = Date.now(),
+): {
   status: TodayMatch["status"];
   statusLabel: string;
 } {
-  if (isFinished(game)) {
+  if (isFinished(match)) {
     return { status: "finished", statusLabel: "Full time" };
   }
 
-  const elapsed = game.time_elapsed?.toLowerCase() ?? "";
-
-  if (elapsed === "notstarted") {
-    return { status: "upcoming", statusLabel: "Upcoming" };
-  }
-
-  if (elapsed) {
-    return { status: "live", statusLabel: elapsed };
+  const kickoffMs = kickoff.getTime();
+  if (kickoffMs <= now && now - kickoffMs < LIVE_WINDOW_MS) {
+    return { status: "live", statusLabel: "Live" };
   }
 
   return { status: "upcoming", statusLabel: "Upcoming" };
 }
 
-export function mapGameToTodayMatch(game: RawGame, kickoff: Date): TodayMatch {
-  const { status, statusLabel } = matchStatus(game);
+export function mapMatchToTodayMatch(
+  match: RawMatch,
+  kickoff: Date,
+  now = Date.now(),
+): TodayMatch {
+  const { status, statusLabel } = matchStatus(match, kickoff, now);
+  const ft = match.score?.ft;
 
   return {
-    id: game.id,
-    homeTeam: teamName(game, "home"),
-    awayTeam: teamName(game, "away"),
-    homeScore: parseScore(game.home_score),
-    awayScore: parseScore(game.away_score),
-    group: game.group?.trim() || game.type?.trim() || "—",
+    id: matchId(match),
+    homeTeam: match.team1?.trim() || "TBD",
+    awayTeam: match.team2?.trim() || "TBD",
+    homeScore: ft?.[0] ?? null,
+    awayScore: ft?.[1] ?? null,
+    group: normalizeGroup(match.group) || match.round?.trim() || "—",
     status,
     statusLabel,
     kickoffDhaka: formatKickoffDhaka(kickoff),
@@ -202,29 +179,34 @@ export function mapGameToTodayMatch(game: RawGame, kickoff: Date): TodayMatch {
 }
 
 export function filterUpcomingMatches(
-  games: RawGame[],
+  matches: RawMatch[],
   limit = UPCOMING_MATCH_LIMIT,
+  now = Date.now(),
 ): TodayMatch[] {
-  return games
-    .map((game) => {
-      if (isFinished(game)) {
+  return matches
+    .map((match) => {
+      if (isFinished(match)) {
         return null;
       }
 
-      const kickoff = parseLocalDate(game.local_date);
+      const kickoff = parseMatchKickoff(match.date, match.time);
       if (!kickoff) {
         return null;
       }
 
-      return mapGameToTodayMatch(game, kickoff);
+      if (kickoff.getTime() + LIVE_WINDOW_MS < now) {
+        return null;
+      }
+
+      return mapMatchToTodayMatch(match, kickoff, now);
     })
     .filter((match): match is TodayMatch => match !== null)
     .sort((left, right) => left.kickoffTimestamp - right.kickoffTimestamp)
     .slice(0, limit);
 }
 
-async function fetchAllGames(): Promise<RawGame[]> {
-  const response = await fetch(GAMES_API, {
+async function fetchAllMatches(): Promise<RawMatch[]> {
+  const response = await fetch(MATCHES_API, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: {
       Accept: "application/json",
@@ -234,11 +216,11 @@ async function fetchAllGames(): Promise<RawGame[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`Games API failed (${response.status})`);
+    throw new Error(`World Cup matches API failed (${response.status})`);
   }
 
-  const payload = (await response.json()) as GamesResponse;
-  return payload.games ?? [];
+  const payload = (await response.json()) as WorldCupResponse;
+  return payload.matches ?? [];
 }
 
 export async function getUpcomingMatches(options?: {
@@ -256,15 +238,15 @@ export async function getUpcomingMatches(options?: {
     };
   }
 
-  const games = await fetchAllGames();
-  const matches = filterUpcomingMatches(games, limit);
+  const matches = await fetchAllMatches();
+  const upcoming = filterUpcomingMatches(matches, limit, now);
   const fetchedAt = new Date().toISOString();
 
   memoryCache = {
     expiresAt: now + CACHE_TTL_MS,
-    matches,
+    matches: upcoming,
     fetchedAt,
   };
 
-  return { matches, fetchedAt, fromCache: false };
+  return { matches: upcoming, fetchedAt, fromCache: false };
 }
