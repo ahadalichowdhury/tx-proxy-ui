@@ -1,6 +1,7 @@
-import { count, gt, lt } from "drizzle-orm";
-import { getDb } from "@/db/index";
-import { presenceSessions } from "@/db/schema";
+import {
+  countActivePresenceSessions,
+  upsertPresenceHeartbeat,
+} from "@/db/repositories";
 import {
   ACTIVE_USER_WINDOW_MS,
   PRESENCE_STALE_MS,
@@ -19,46 +20,11 @@ export async function recordPresenceHeartbeat(
   sessionId: string,
   path?: string,
 ): Promise<void> {
-  const db = getDb();
-  const now = new Date();
-
-  await db
-    .insert(presenceSessions)
-    .values({
-      sessionId,
-      lastSeen: now,
-      path: path?.slice(0, 255) ?? null,
-    })
-    .onConflictDoUpdate({
-      target: presenceSessions.sessionId,
-      set: {
-        lastSeen: now,
-        path: path?.slice(0, 255) ?? null,
-      },
-    });
-
-  await pruneStalePresenceSessions();
+  await upsertPresenceHeartbeat(sessionId, path?.slice(0, 255) ?? null);
 }
 
 export async function getActiveUserCount(
   windowMs = ACTIVE_USER_WINDOW_MS,
 ): Promise<number> {
-  const db = getDb();
-  const cutoff = new Date(Date.now() - windowMs);
-
-  const [result] = await db
-    .select({ total: count() })
-    .from(presenceSessions)
-    .where(gt(presenceSessions.lastSeen, cutoff));
-
-  return result?.total ?? 0;
-}
-
-async function pruneStalePresenceSessions(): Promise<void> {
-  const db = getDb();
-  const cutoff = new Date(Date.now() - PRESENCE_STALE_MS);
-
-  await db
-    .delete(presenceSessions)
-    .where(lt(presenceSessions.lastSeen, cutoff));
+  return countActivePresenceSessions(windowMs);
 }

@@ -5,9 +5,3 @@ pages_build_output_dir = ".vercel/output/static"
 
 [vars]
 PROXY_BASE_URL = "https://proxy.previewcloud.cloud/proxy"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "tv-proxy-ui"
-database_id = "0a5d5036-3ee0-4738-8c33-30269de5fbdb"
-migrations_dir = "drizzle/migrations"

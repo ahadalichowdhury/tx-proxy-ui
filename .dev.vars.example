@@ -8,8 +8,16 @@ PROXY_TOKEN_SECRET=replace-with-a-random-string-at-least-32-characters-long
 # Public URL of your Go proxy (must match PROXY_BASE on the proxy server).
 PROXY_BASE_URL=http://127.0.0.1:8080/proxy
 
+# Optional override for channel data API. Defaults to PROXY_BASE_URL without /proxy.
+# DATA_API_URL=http://127.0.0.1:8080
+
+# Shared with tv-proxy-go for admin writes to /data/* endpoints.
+# Generate: openssl rand -base64 48
+DATA_API_SECRET=replace-with-a-random-string-at-least-32-characters-long
+
 # Local setup:
 # 1. cp .dev.vars.example .dev.vars
-# 2. Set values above (generate secret: openssl rand -base64 48)
-# 3. Start Go proxy: cd ../tv-proxy-go && go run .
-# 4. Start UI: npm run dev  (or npm run preview for full Cloudflare D1 flow)
+# 2. Set values above
+# 3. Configure MongoDB + DATA_API_SECRET on Go proxy (.env)
+# 4. Start Go proxy: cd ../tv-proxy-go && go run .
+# 5. Start UI: npm run preview

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { AdBanner } from "@/components/AdBanner";
 import { StreamPlayer, type PlaybackStatus } from "@/components/StreamPlayer";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
@@ -336,6 +337,8 @@ export function ChannelDashboard({ channels, proxyBaseUrl }: ChannelDashboardPro
                 </div>
               </div>
             )}
+
+            <AdBanner className="mt-3 overflow-hidden rounded-xl bg-[#111827]/50 p-2 ring-1 ring-white/5" />
           </div>
         </aside>
       </div>

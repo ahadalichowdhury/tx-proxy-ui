@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AdSenseScript } from "@/components/AdSenseScript";
 import { TodayMatches } from "@/components/TodayMatches";
 import { PresenceHeartbeat } from "@/components/PresenceHeartbeat";
+import { ADSENSE_CLIENT_ID } from "@/lib/adsense/config";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +31,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <meta name="google-adsense-account" content={ADSENSE_CLIENT_ID} />
+        <AdSenseScript />
+      </head>
       <body className="min-h-full bg-zinc-950 text-zinc-100">
         {children}
         <PresenceHeartbeat />

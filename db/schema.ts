@@ -1,60 +1,31 @@
-import { relations, sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-
 export const streamStatusEnum = ["live", "offline"] as const;
 export type StreamStatus = (typeof streamStatusEnum)[number];
 
-export const playlistSources = sqliteTable("playlist_sources", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  title: text("title").notNull(),
-  sourceUrl: text("source_url").notNull().unique(),
-  sourceSnapshot: text("source_snapshot"),
-  baseUrl: text("base_url"),
-  lastRefreshedAt: integer("last_refreshed_at", { mode: "timestamp_ms" }),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .default(sql`(unixepoch() * 1000)`),
-});
+export type PlaylistSource = {
+  id: number;
+  title: string;
+  sourceUrl: string;
+  sourceSnapshot: string | null;
+  baseUrl: string | null;
+  lastRefreshedAt: Date | null;
+  createdAt: Date;
+};
 
-export const streams = sqliteTable("streams", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  title: text("title").notNull(),
-  url: text("url").notNull(),
-  groupTitle: text("group_title"),
-  logo: text("logo"),
-  channelKey: text("channel_key"),
-  links: text("links"),
-  status: text("status", { enum: streamStatusEnum })
-    .notNull()
-    .default("offline"),
-  sourceId: integer("source_id").references(() => playlistSources.id, {
-    onDelete: "cascade",
-  }),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .default(sql`(unixepoch() * 1000)`),
-});
+export type Stream = {
+  id: number;
+  title: string;
+  url: string;
+  groupTitle: string | null;
+  logo: string | null;
+  channelKey: string | null;
+  links: string | null;
+  status: StreamStatus;
+  sourceId: number | null;
+  createdAt: Date;
+};
 
-export const playlistSourcesRelations = relations(playlistSources, ({ many }) => ({
-  streams: many(streams),
-}));
-
-export const streamsRelations = relations(streams, ({ one }) => ({
-  source: one(playlistSources, {
-    fields: [streams.sourceId],
-    references: [playlistSources.id],
-  }),
-}));
-
-export type PlaylistSource = typeof playlistSources.$inferSelect;
-export type NewPlaylistSource = typeof playlistSources.$inferInsert;
-export type Stream = typeof streams.$inferSelect;
-export type NewStream = typeof streams.$inferInsert;
-
-export const presenceSessions = sqliteTable("presence_sessions", {
-  sessionId: text("session_id").primaryKey(),
-  lastSeen: integer("last_seen", { mode: "timestamp_ms" }).notNull(),
-  path: text("path"),
-});
-
-export type PresenceSession = typeof presenceSessions.$inferSelect;
+export type PresenceSession = {
+  sessionId: string;
+  lastSeen: Date;
+  path: string | null;
+};

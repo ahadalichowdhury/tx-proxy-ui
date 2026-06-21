@@ -2,7 +2,8 @@
 
 declare global {
   interface CloudflareEnv {
-    DB: D1Database;
+    DATA_API_URL?: string;
+    DATA_API_SECRET?: string;
     ADMIN_PASSWORD: string;
     SESSION_SECRET: string;
     PROXY_BASE_URL?: string;

@@ -1,6 +1,11 @@
-import { eq } from "drizzle-orm";
-import type { Database } from "@/db";
-import { playlistSources, streams, type PlaylistSource } from "@/db/schema";
+import type { PlaylistSource } from "@/db/schema";
+import {
+  deleteStreamById,
+  insertStream,
+  listStreamsBySourceId,
+  updatePlaylistSourceById,
+  updateStreamById,
+} from "@/db/repositories";
 import {
   extractChannelsFromSource,
   type ExtractedChannel,
@@ -46,7 +51,6 @@ function channelNeedsUpdate(
 }
 
 export async function syncPlaylistSource(
-  db: Database,
   source: PlaylistSource,
 ): Promise<PlaylistSyncResult> {
   const extracted = source.sourceSnapshot?.trim()
@@ -61,18 +65,7 @@ export async function syncPlaylistSource(
         defaultTitle: source.title,
       });
 
-  const existing = await db
-    .select({
-      id: streams.id,
-      title: streams.title,
-      url: streams.url,
-      groupTitle: streams.groupTitle,
-      logo: streams.logo,
-      channelKey: streams.channelKey,
-      links: streams.links,
-    })
-    .from(streams)
-    .where(eq(streams.sourceId, source.id));
+  const existing = await listStreamsBySourceId(source.id);
 
   const existingByKey = new Map<
     string,
@@ -103,18 +96,14 @@ export async function syncPlaylistSource(
 
     if (existingChannel) {
       if (channelNeedsUpdate(existingChannel, channel)) {
-        await db
-          .update(streams)
-          .set(payload)
-          .where(eq(streams.id, existingChannel.id));
-
+        await updateStreamById(existingChannel.id, payload);
         updatedCount += 1;
       }
 
       continue;
     }
 
-    await db.insert(streams).values({
+    await insertStream({
       ...payload,
       sourceId: source.id,
     });
@@ -129,14 +118,13 @@ export async function syncPlaylistSource(
       continue;
     }
 
-    await db.delete(streams).where(eq(streams.id, row.id));
+    await deleteStreamById(row.id);
     removedCount += 1;
   }
 
-  await db
-    .update(playlistSources)
-    .set({ lastRefreshedAt: new Date() })
-    .where(eq(playlistSources.id, source.id));
+  await updatePlaylistSourceById(source.id, {
+    lastRefreshedAt: new Date(),
+  });
 
   return { importedCount, updatedCount, removedCount };
 }

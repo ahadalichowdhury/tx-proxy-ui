@@ -1,10 +1,19 @@
 "use server";
 
-import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getDb } from "@/db";
 import { getPlaylistSourceById } from "@/db/queries";
-import { playlistSources, streams, type StreamStatus } from "@/db/schema";
+import {
+  deletePlaylistSourceById,
+  findPlaylistSourceIdByUrl,
+  insertPlaylistSource,
+  insertStream,
+  listStreamsForManualImport,
+  updatePlaylistSourceById,
+  updateStreamById,
+  updateStreamStatus as updateStreamStatusRepo,
+  deleteStreamById,
+} from "@/db/repositories";
+import type { StreamStatus } from "@/db/schema";
 import { requireAdminSession } from "@/lib/auth/session";
 import {
   extractChannelsFromSource,
@@ -20,36 +29,23 @@ function localSnapshotSourceUrl(id: string): string {
   return `local://snapshot/${id}`;
 }
 
-async function upsertPlaylistSourceAndSync(
-  db: ReturnType<typeof getDb>,
-  input: {
-    title: string;
-    sourceUrl: string;
-    sourceSnapshot?: string | null;
-    baseUrl?: string | null;
-  },
-): Promise<StreamActionState> {
-  const [existingSource] = await db
-    .select({ id: playlistSources.id })
-    .from(playlistSources)
-    .where(eq(playlistSources.sourceUrl, input.sourceUrl))
-    .limit(1);
-
-  let source = existingSource
-    ? await getPlaylistSourceById(existingSource.id)
-    : null;
+async function upsertPlaylistSourceAndSync(input: {
+  title: string;
+  sourceUrl: string;
+  sourceSnapshot?: string | null;
+  baseUrl?: string | null;
+}): Promise<StreamActionState> {
+  const existingId = await findPlaylistSourceIdByUrl(input.sourceUrl);
+  let source = existingId ? await getPlaylistSourceById(existingId) : null;
 
   if (source) {
-    await db
-      .update(playlistSources)
-      .set({
-        title: input.title,
-        baseUrl: input.baseUrl ?? null,
-        ...(input.sourceSnapshot !== undefined
-          ? { sourceSnapshot: input.sourceSnapshot }
-          : {}),
-      })
-      .where(eq(playlistSources.id, source.id));
+    await updatePlaylistSourceById(source.id, {
+      title: input.title,
+      baseUrl: input.baseUrl ?? null,
+      ...(input.sourceSnapshot !== undefined
+        ? { sourceSnapshot: input.sourceSnapshot }
+        : {}),
+    });
 
     source = {
       ...source,
@@ -61,24 +57,15 @@ async function upsertPlaylistSourceAndSync(
           : source.sourceSnapshot,
     };
   } else {
-    const [inserted] = await db
-      .insert(playlistSources)
-      .values({
-        title: input.title,
-        sourceUrl: input.sourceUrl,
-        sourceSnapshot: input.sourceSnapshot ?? null,
-        baseUrl: input.baseUrl ?? null,
-      })
-      .returning();
-
-    source = inserted;
+    source = await insertPlaylistSource({
+      title: input.title,
+      sourceUrl: input.sourceUrl,
+      sourceSnapshot: input.sourceSnapshot ?? null,
+      baseUrl: input.baseUrl ?? null,
+    });
   }
 
-  if (!source) {
-    return { error: "Failed to save playlist source." };
-  }
-
-  const syncResult = await syncPlaylistSource(db, source);
+  const syncResult = await syncPlaylistSource(source);
 
   revalidateStreamPages();
 
@@ -132,15 +119,7 @@ function titleFromSourceUrl(url: string): string {
 async function importManualChannels(
   extracted: Awaited<ReturnType<typeof extractChannelsFromSource>>,
 ): Promise<Pick<StreamActionState, "importedCount" | "updatedCount">> {
-  const db = getDb();
-  const existing = await db
-    .select({
-      id: streams.id,
-      url: streams.url,
-      title: streams.title,
-      sourceId: streams.sourceId,
-    })
-    .from(streams);
+  const existing = await listStreamsForManualImport();
 
   const existingByBase = new Map<
     string,
@@ -174,17 +153,14 @@ async function importManualChannels(
         channel.title.trim() !== existingChannel.title.trim();
 
       if (needsUrlUpdate || needsTitleUpdate) {
-        await db
-          .update(streams)
-          .set({
-            url: normalizedUrl,
-            groupTitle: channel.groupTitle ?? null,
-            logo: channel.logo ?? null,
-            channelKey: channel.channelKey,
-            links: JSON.stringify(channel.links),
-            ...(needsTitleUpdate ? { title: channel.title.trim() } : {}),
-          })
-          .where(eq(streams.id, existingChannel.id));
+        await updateStreamById(existingChannel.id, {
+          url: normalizedUrl,
+          groupTitle: channel.groupTitle ?? null,
+          logo: channel.logo ?? null,
+          channelKey: channel.channelKey,
+          links: JSON.stringify(channel.links),
+          ...(needsTitleUpdate ? { title: channel.title.trim() } : {}),
+        });
 
         existingUrls.delete(existingChannel.url.trim());
         existingUrls.add(normalizedUrl);
@@ -202,7 +178,7 @@ async function importManualChannels(
       continue;
     }
 
-    await db.insert(streams).values({
+    await insertStream({
       title: channel.title,
       url: normalizedUrl,
       groupTitle: channel.groupTitle ?? null,
@@ -210,6 +186,7 @@ async function importManualChannels(
       channelKey: channel.channelKey,
       links: JSON.stringify(channel.links),
       status: "live",
+      sourceId: null,
     });
 
     existingUrls.add(normalizedUrl);
@@ -265,7 +242,7 @@ export async function addStream(
             ? file.name.replace(/\.(m3u8?|txt)$/i, "").replace(/[-_]+/g, " ")
             : "Uploaded Playlist");
 
-        return upsertPlaylistSourceAndSync(getDb(), {
+        return upsertPlaylistSourceAndSync({
           title,
           sourceUrl: localSnapshotSourceUrl(snapshotId),
           sourceSnapshot: inlineContent,
@@ -284,7 +261,7 @@ export async function addStream(
         if (shouldManageAsPlaylistSource(content, normalizedUrl)) {
           const title = defaultTitle || titleFromSourceUrl(normalizedUrl);
 
-          return upsertPlaylistSourceAndSync(getDb(), {
+          return upsertPlaylistSourceAndSync({
             title,
             sourceUrl: normalizedUrl,
             baseUrl: normalizedBaseUrl,
@@ -299,17 +276,13 @@ export async function addStream(
       if (shouldManageAsPlaylistSource(inlineContent, normalizedUrl)) {
         const title = defaultTitle || titleFromSourceUrl(normalizedUrl);
 
-        return upsertPlaylistSourceAndSync(getDb(), {
+        return upsertPlaylistSourceAndSync({
           title,
           sourceUrl: normalizedUrl,
           sourceSnapshot: inlineContent,
           baseUrl: normalizedBaseUrl,
         });
       }
-    }
-
-    if (inlineContent && !sourceUrl && file) {
-      // Playlist uploads handled above; fall through for single-stream files.
     }
 
     const extracted = await extractChannelsFromSource({
@@ -359,8 +332,7 @@ export async function refreshPlaylistSource(
       return { error: "Playlist source not found." };
     }
 
-    const db = getDb();
-    const syncResult = await syncPlaylistSource(db, source);
+    const syncResult = await syncPlaylistSource(source);
 
     revalidateStreamPages();
 
@@ -388,8 +360,7 @@ export async function deletePlaylistSource(
       return { error: "Invalid playlist source id." };
     }
 
-    const db = getDb();
-    await db.delete(playlistSources).where(eq(playlistSources.id, id));
+    await deletePlaylistSourceById(id);
 
     revalidateStreamPages();
 
@@ -412,8 +383,7 @@ export async function deleteStream(id: number): Promise<StreamActionState> {
       return { error: "Invalid channel id." };
     }
 
-    const db = getDb();
-    await db.delete(streams).where(eq(streams.id, id));
+    await deleteStreamById(id);
 
     revalidateStreamPages();
 
@@ -437,8 +407,7 @@ export async function updateStreamStatus(
       return { error: "Invalid channel id." };
     }
 
-    const db = getDb();
-    await db.update(streams).set({ status }).where(eq(streams.id, id));
+    await updateStreamStatusRepo(id, status);
 
     revalidateStreamPages();
 

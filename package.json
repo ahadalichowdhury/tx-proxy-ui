@@ -10,13 +10,9 @@
     "pages:build": "npx @cloudflare/next-on-pages && node scripts/fix-pages-root-route.mjs",
     "pages:dev": "wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat",
     "preview": "npm run build && npm run pages:build && npm run pages:dev",
-    "deploy": "npm run build && npm run pages:build && wrangler pages deploy .vercel/output/static",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply tv-proxy-ui --local",
-    "db:migrate:remote": "wrangler d1 migrations apply tv-proxy-ui --remote"
+    "deploy": "npm run build && npm run pages:build && wrangler pages deploy .vercel/output/static"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.2",
     "hls.js": "^1.6.5",
     "next": "15.5.2",
     "react": "19.2.4",
@@ -31,7 +27,6 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "drizzle-kit": "^0.31.1",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
     "tailwindcss": "^4",
